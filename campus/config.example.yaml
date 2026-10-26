@@ -1,0 +1,126 @@
+# CampusResearch profile. Core runtime and capabilities come from DeerFlow.
+config_version: 61
+log_level: info
+models:
+  - name: campus-model
+    display_name: DeepSeek Flash
+    use: deerflow.models.patched_deepseek:PatchedChatDeepSeek
+    model: $CAMPUS_MODEL_NAME
+    base_url: $CAMPUS_MODEL_BASE_URL
+    api_key: $CAMPUS_MODEL_API_KEY
+    max_tokens: 8192
+    timeout: 120
+    max_retries: 2
+    supports_vision: false
+    supports_thinking: true
+    supports_reasoning_effort: true
+    reasoning:
+      thinking: optional
+      dialect: openai_extra_body
+      history: preserve
+      effort:
+        values: [low, high, max]
+        default: low
+        aliases:
+          minimal: low
+          medium: high
+
+lead_prompt_overlay:
+  prepend: |
+    你是 CampusResearch，面向中国大学生的毕业设计选题与技术方案调研助手。
+    默认使用简体中文，先给清晰结论，再解释理由。用户背景、技术基础、时间和预算决定方案范围。
+    对选题调研任务，复用原有规划、子任务与文件工具；问题足够复杂时再拆分子任务，简单追问直接回答。
+    在启用计划模式时使用 write_todos 跟踪工作；在启用子 Agent 时，把有明确边界且相互独立的资料核实委派给 task，主 Agent 负责综合与交付。
+    已知信息足够就先开展调研；确实影响选型时再询问少量关键问题。不得循环要求确认。
+  append: |
+    <campus_research_contract>
+    资料检索：优先通过已启用的 parallel-search MCP 的 web_search 与 web_fetch 查找资料和读取原文。
+    工具名可能带服务器前缀，应使用实际发现的工具及其参数 schema。需要时使用工具检索功能发现 MCP 工具。
+    比较产品、技术或开源仓库时，应联网核实；优先官方文档和原始仓库。记录来源标题、URL、核实日期。
+    区分“已查证事实”“基于资料的建议”“尚需验证”，不要编造链接、价格、星数、API 能力或性能数据。
+    MCP 不可用时明确说明受影响内容，仍可提供标注为待核实的初步方案，不得假装已搜索。
+    控制检索轮数：每个子任务最多两次外部调用，返回简短结论与来源即可。遇到限流不要反复重试，保留已获得的来源并说明缺口。
+    不依赖 Notion、飞书、GitHub 登录或企业文档账号。GitHub 可作为公开项目资料来源。
+    功能分为必做、可选、暂缓；比较至少三条有实际差异的技术路线（用户要求少于三条时遵从用户）。
+    优先可在个人电脑测试、成本可控、在给定时间内能完成的方案，说明数据与外部账号的获取方式。
+    完整调研报告按以下七部分输出，短追问无需重复整份报告：
+    1. 选题背景与目标用户
+    2. 类似产品及开源项目
+    3. 可选技术路线对比
+    4. 建议实现的功能
+    5. 开发计划（按周列出交付物与验收标准）
+    6. 风险与尚需验证的问题
+    7. 参考来源（可点击链接与核实日期）
+    完整报告应使用现有文件工具保存到 /mnt/user-data/outputs/campus-research-report.md，并通过 present_files 提供下载。
+    无法写文件时在对话中完整提供内容并说明原因，不能伪造下载链接。
+    用户缩短周期或改变基础时，沿用已核实的资料，重新调整功能边界与计划。
+    帮助准备答辩时清楚区分开源框架提供的能力与学生自己的改动，不声称代码全部原创或测试已经通过。
+    </campus_research_contract>
+
+tool_groups:
+  - name: campus:planning
+  - name: file:read
+  - name: file:write
+tools:
+  - name: estimate_project_schedule
+    group: campus:planning
+    use: campus.tools:estimate_project_schedule
+  - name: ls
+    group: file:read
+    use: deerflow.sandbox.tools:ls_tool
+  - name: read_file
+    group: file:read
+    use: deerflow.sandbox.tools:read_file_tool
+  - name: glob
+    group: file:read
+    use: deerflow.sandbox.tools:glob_tool
+  - name: grep
+    group: file:read
+    use: deerflow.sandbox.tools:grep_tool
+  - name: write_file
+    group: file:write
+    use: deerflow.sandbox.tools:write_file_tool
+  - name: str_replace
+    group: file:write
+    use: deerflow.sandbox.tools:str_replace_tool
+
+sandbox:
+  use: deerflow.sandbox.local:LocalSandboxProvider
+  allow_host_bash: false
+token_usage:
+  enabled: true
+token_budget:
+  enabled: true
+  max_tokens: 350000
+recursion_limit: 250
+summarization:
+  enabled: true
+  trigger:
+    - type: tokens
+      value: 12000
+    - type: messages
+      value: 12
+  keep:
+    type: messages
+    value: 6
+  trim_tokens_to_summarize: 12000
+tool_search:
+  enabled: true
+subagents:
+  timeout_seconds: 240
+  max_turns: 12
+  max_total_per_run: 3
+  token_budget:
+    enabled: true
+    max_tokens: 100000
+  agents:
+    general-purpose:
+      prompt_overlay:
+        append: "你协助校园课题调研。优先使用 Parallel Search MCP 查找官方来源；报告事实、来源 URL 与待验证项。不要把建议写成已验证事实。"
+checkpointer:
+  type: sqlite
+database:
+  backend: sqlite
+skills:
+  path: skills
+  deferred_discovery: true

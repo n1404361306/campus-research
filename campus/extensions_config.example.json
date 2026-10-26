@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "parallel-search": {
+      "enabled": true,
+      "type": "http",
+      "url": "https://search.parallel.ai/mcp",
+      "headers": { "User-Agent": "deer-flow" },
+      "description": "联网检索与原文读取，用于校园选题及技术方案调研"
+    }
+  },
+  "skills": {}
+}
